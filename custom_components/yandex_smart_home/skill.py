@@ -15,7 +15,7 @@ from homeassistant.helpers.network import get_url, NoURLAvailableError
 from homeassistant.helpers.typing import HomeAssistantType
 from homeassistant.core import Event
 
-from .const import DOMAIN, CONF_SKILL, CONF_SKILL_NAME, CONF_SKILL_USER_ID, CONF_ENTITY_CONFIG, CONF_FILTER, CONF_SETTINGS
+from .const import DOMAIN, CONF_SKILL, CONF_SKILL_NAME, CONF_SKILL_ID, CONF_SKILL_OAUTH_TOKEN, CONF_SKILL_USER_ID, CONF_ENTITY_CONFIG, CONF_FILTER, CONF_SETTINGS
 from .helpers import RequestData, YandexEntity, Config
 from .error import SmartHomeError
 from .core.yandex_session import YandexSession
@@ -95,6 +95,9 @@ class YandexSkill():
 
     async def get_skill_id(self):
         try:
+            if CONF_SKILL_ID in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_ID] != '':
+                self.skill_id = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_ID]
+                return self.skill_id
             if self.skill_id == '':
                 # check if skill exists
                 r = await self.session.get(f"{INDEX}/api/snapshot")
@@ -116,6 +119,9 @@ class YandexSkill():
 
     async def get_oauth_token(self):
         try:
+            if CONF_SKILL_OAUTH_TOKEN in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_OAUTH_TOKEN] != '':
+                self.oauth_token = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_OAUTH_TOKEN]
+                return self.oauth_token
             if self.oauth_token == '':
                 r = await self.session.get(TOKEN_URL)
                 assert r.status == 200, await r.read()
