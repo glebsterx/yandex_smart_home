@@ -25,7 +25,7 @@ yandex_smart_home:
     token: !secret yandex_token
     proxy: https://myproxy.com
     skill_name: My Home Assistant
-    skill_user: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    user_id: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
   settings:
     pressure_unit: mmHg
   filter:
@@ -108,7 +108,7 @@ yandex_smart_home:
       (string) (Optional) Your proxy server, if you need it.
     skill_name:
       (string) (Optional) Name of your dialog in Yandex.Dialogs (also might be set via GUI). Default "Home Assistant".
-    skill_user:
+    user_id:
       (string) (Optional) User ID, under which you are logged in to Home Assistant, during the linking of accounts (also might be set via GUI). 
 
   settings:

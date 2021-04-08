@@ -17,7 +17,7 @@ from .const import (
     CONF_ENTITY_PROPERTIES, CONF_ENTITY_PROPERTY_ENTITY, CONF_ENTITY_PROPERTY_ATTRIBUTE, CONF_ENTITY_PROPERTY_TYPE,
     CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID, CONF_RELATIVE_VOLUME_ONLY, CONF_ENTITY_RANGE, CONF_ENTITY_RANGE_MAX, 
     CONF_ENTITY_RANGE_MIN, CONF_ENTITY_RANGE_PRECISION, CONF_ENTITY_MODE_MAP, PRESSURE_UNIT_MMHG, PRESSURE_UNITS_TO_YANDEX_UNITS,
-    CONF_SKILL, CONF_SKILL_NAME, CONF_SKILL_USER, CONF_PROXY)
+    CONF_SKILL, CONF_SKILL_NAME, CONF_SKILL_USER_ID, CONF_PROXY, CONF_SKILL_OAUTH_TOKEN, CONF_SKILL_ID)
 
 from .http import async_register_http
 from .core import utils
@@ -61,7 +61,10 @@ SKILL_SCHEMA = vol.Schema({
     vol.Optional(CONF_TOKEN): cv.string,
     vol.Optional(CONF_PROXY): cv.string,
     vol.Optional(CONF_SKILL_NAME): cv.string,
-    vol.Optional(CONF_SKILL_USER): cv.string,
+    vol.Optional(CONF_SKILL_USER_ID): cv.string,
+    # light
+    vol.Optional(CONF_SKILL_OAUTH_TOKEN): cv.string,
+    vol.Optional(CONF_SKILL_ID): cv.string,
 }, extra=vol.PREVENT_EXTRA)
 
 SETTINGS_SCHEMA = vol.Schema({
@@ -94,10 +97,12 @@ async def async_setup(hass: HomeAssistant, yaml_config: Dict[str, Any]):
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     async def update_cookie_and_token(**kwargs):
+        kwargs[CONF_SKILL_NAME] = entry.data[CONF_SKILL_NAME]
+        kwargs[CONF_SKILL_USER_ID] = entry.data[CONF_SKILL_USER_ID]
         hass.config_entries.async_update_entry(entry, data=kwargs)
     
     session = async_create_clientsession(hass)
-    yandex = YandexSession(session, **entry.data)
+    yandex = YandexSession(session, entry.data['x_token'], entry.data['music_token'], entry.data['cookie'])
     if CONF_SKILL in hass.data[DOMAIN]:
         config = hass.data[DOMAIN][CONF_SKILL]
         yandex.proxy = config.get(CONF_PROXY)
@@ -110,10 +115,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             title="Yandex Smart Home")
         return False
     
-    if CONF_SKILL_NAME in entry.options and CONF_SKILL_NAME not in hass.data[DOMAIN][CONF_SKILL]:
-        hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_NAME] = entry.options[CONF_SKILL_NAME]
-    if CONF_SKILL_USER in entry.options and CONF_SKILL_USER not in hass.data[DOMAIN][CONF_SKILL]:
-        hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER] = entry.options[CONF_SKILL_USER]
+    if CONF_SKILL_NAME in entry.data and CONF_SKILL_NAME not in hass.data[DOMAIN][CONF_SKILL]:
+        hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_NAME] = entry.data[CONF_SKILL_NAME]
+    if CONF_SKILL_USER_ID in entry.data and CONF_SKILL_USER_ID not in hass.data[DOMAIN][CONF_SKILL]:
+        hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER_ID] = entry.data[CONF_SKILL_USER_ID]
+    # light
+    # if CONF_SKILL_OAUTH_TOKEN in entry.data and CONF_SKILL_OAUTH_TOKEN not in hass.data[DOMAIN][CONF_SKILL]:
+        # hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_OAUTH_TOKEN] = entry.data[CONF_SKILL_OAUTH_TOKEN]
+    # if CONF_SKILL_ID in entry.data and CONF_SKILL_ID not in hass.data[DOMAIN][CONF_SKILL]:
+        # hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_ID] = entry.data[CONF_SKILL_ID]
     
     await _setup_skill(hass, yandex)
 

@@ -14,7 +14,7 @@ from homeassistant.core import callback
 from homeassistant.config_entries import ConfigFlow, OptionsFlow
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
-from .const import DOMAIN, CONF_SKILL_NAME, CONF_SKILL_USER
+from .const import DOMAIN, CONF_SKILL_NAME, CONF_SKILL_USER_ID
 from .core.yandex_session import YandexSession, LoginResponse
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,12 +29,13 @@ CAPTCHA_SCHEMA = vol.Schema({
 
 class YandexSmartHomeFlowHandler(ConfigFlow, domain=DOMAIN):
     yandex: YandexSession = None
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry):
-        """Get the options flow for this handler."""
-        return YandexSmartHomeOptionsFlowHandler(config_entry)
+    resp = None
+    
+    # @staticmethod
+    # @callback
+    # def async_get_options_flow(config_entry):
+        # """Get the options flow for this handler."""
+        # return YandexSmartHomeOptionsFlowHandler(config_entry)
 
     async def async_step_import(self, data: dict):
         """Init by component setup. Forward YAML login/pass to auth."""
@@ -48,7 +49,7 @@ class YandexSmartHomeFlowHandler(ConfigFlow, domain=DOMAIN):
 
         else:
             return await self.async_step_auth(data)
-
+        
     async def async_step_user(self, user_input=None):
         """Init by user via GUI"""
         if user_input is None:
@@ -97,8 +98,8 @@ class YandexSmartHomeFlowHandler(ConfigFlow, domain=DOMAIN):
         resp = await self.yandex.validate_token(user_input['token'])
         return await self._check_yandex_response(resp)
 
-    async def async_step_capcha(self, user_input):
-        """User submited capcha. Or YAML error."""
+    async def async_step_captcha(self, user_input):
+        """User submited captcha. Or YAML error."""
         # if user_input is None:
         #     return self.cur_step
 
@@ -108,31 +109,66 @@ class YandexSmartHomeFlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_step_external(self, user_input):
         return await self.async_step_auth(user_input)
 
+    async def async_step_options(self, user_input=None):
+        """Manage the options."""
+        if user_input is None:
+            user_settings_url = '/config/users'
+            return self.async_show_form(
+                step_id="options",
+                data_schema=vol.Schema({
+                    vol.Optional(
+                        CONF_SKILL_NAME,
+                        description={'suggested_value': 'Home Assistant'}
+                    ): str,
+                    vol.Optional(
+                        CONF_SKILL_USER_ID
+                    ): str
+                }),
+                description_placeholders={
+                    'user_settings_url': user_settings_url
+                }
+            )
+            
+        # set unique_id or return existing entry
+        entry = await self.async_set_unique_id(self.resp.display_login)
+        skill_name = user_input[CONF_SKILL_NAME] if CONF_SKILL_NAME in user_input else None
+        skill_user = user_input[CONF_SKILL_USER_ID] if CONF_SKILL_USER_ID in user_input else None
+        data={
+            'x_token': self.resp.x_token,
+            'music_token': None,
+            'cookie': None,
+            CONF_SKILL_NAME: skill_name,
+            CONF_SKILL_USER_ID: skill_user
+        }
+
+        if entry:
+            data['music_token'] = entry['music_token'] if 'music_token' in entry else None
+            data['cookie'] = entry['cookie'] if 'cookie' in entry else None
+            # update existing entry with same login
+            self.hass.config_entries.async_update_entry(
+                entry,
+                data=data
+            )
+            return self.async_abort(reason='account_updated')
+        else:
+            # create new entry for new login
+            return self.async_create_entry(
+                title=self.resp.display_login,
+                data=data
+            )
+
     async def _check_yandex_response(self, resp: LoginResponse):
         """Check Yandex response. Do not create entry for the same login. Show
         captcha form if captcha required. Show auth form with error if error.
         """
         if resp.ok:
-            # set unique_id or return existing entry
-            entry = await self.async_set_unique_id(resp.display_login)
-            if entry:
-                # update existing entry with same login
-                self.hass.config_entries.async_update_entry(
-                    entry,
-                    data={'x_token': resp.x_token}
-                )
-                return self.async_abort(reason='account_updated')
-
-            else:
-                # create new entry for new login
-                return self.async_create_entry(
-                    title=resp.display_login,
-                    data={'x_token': resp.x_token})
+            self.resp = resp
+            return await self.async_step_options()
 
         elif resp.captcha_image_url:
             _LOGGER.debug(f"Captcha required: {resp.captcha_image_url}")
             return self.async_show_form(
-                step_id='capcha',
+                step_id='captcha',
                 data_schema=CAPTCHA_SCHEMA,
                 description_placeholders={
                     'captcha_image_url': resp.captcha_image_url
@@ -158,43 +194,40 @@ class YandexSmartHomeFlowHandler(ConfigFlow, domain=DOMAIN):
 
         raise NotImplemented
 
-class YandexSmartHomeOptionsFlowHandler(OptionsFlow):
-    """Handle options."""
+# class YandexSmartHomeOptionsFlowHandler(OptionsFlow):
+    # """Handle options."""
 
-    def __init__(self, config_entry):
-        """Initialize options flow."""
-        self.config_entry = config_entry
-        self.options = dict(config_entry.options)
+    # def __init__(self, config_entry):
+        # """Initialize options flow."""
+        # self.config_entry = config_entry
+        # self.options = dict(config_entry.options)
 
-    async def async_step_init(self, user_input=None):
-        """Manage the options."""
-        return await self.async_step_skill_options()
+    # async def async_step_init(self, user_input=None):
+        # """Manage the options."""
+        # return await self.async_step_skill_options()
 
-    async def async_step_skill_options(self, user_input=None):
-        """Manage the devices options."""
-        if user_input is not None:
-            self.options[CONF_SKILL_NAME] = user_input[CONF_SKILL_NAME]
-            self.options[CONF_SKILL_USER] = user_input[CONF_SKILL_USER]
-            return self.async_create_entry(title="", data=self.options)
+    # async def async_step_skill_options(self, user_input=None):
+        # """Manage the devices options."""
+        
+        # if user_input is not None:
+            # return self.async_create_entry(title="", data=user_input)
             
-        user_settings_url = '/config/users'
-        return self.async_show_form(
-            step_id="skill_options",
-            data_schema=vol.Schema({
-                vol.Optional(
-                    CONF_SKILL_NAME, 
-                    default=self.config_entry.options.get(
-                        CONF_SKILL_NAME, ""
-                    )
-                ): str,
-                vol.Optional(
-                    CONF_SKILL_USER, 
-                    default=self.config_entry.options.get(
-                        CONF_SKILL_USER, ""
-                    )
-                ): str
-            }),
-            description_placeholders={
-                'user_settings_url': user_settings_url
-            }
-        )
+        # skill_name = self.config_entry.options.get(CONF_SKILL_NAME, '')
+        # user_id = self.config_entry.options.get(CONF_SKILL_USER_ID, '')
+        # user_settings_url = '/config/users'
+        # return self.async_show_form(
+            # step_id="skill_options",
+            # data_schema=vol.Schema({
+                # vol.Optional(
+                    # CONF_SKILL_NAME,
+                    # description={'suggested_value': skill_name}
+                # ): str,
+                # vol.Optional(
+                    # CONF_SKILL_USER_ID,
+                    # description={'suggested_value': user_id}
+                # ): str
+            # }),
+            # description_placeholders={
+                # 'user_settings_url': user_settings_url
+            # }
+        # )

@@ -15,7 +15,7 @@ from homeassistant.helpers.network import get_url, NoURLAvailableError
 from homeassistant.helpers.typing import HomeAssistantType
 from homeassistant.core import Event
 
-from .const import DOMAIN, CONF_SKILL, CONF_SKILL_NAME, CONF_SKILL_USER, CONF_ENTITY_CONFIG, CONF_FILTER, CONF_SETTINGS
+from .const import DOMAIN, CONF_SKILL, CONF_SKILL_NAME, CONF_SKILL_USER_ID, CONF_ENTITY_CONFIG, CONF_FILTER, CONF_SETTINGS
 from .helpers import RequestData, YandexEntity, Config
 from .error import SmartHomeError
 from .core.yandex_session import YandexSession
@@ -48,7 +48,7 @@ class YandexSkill():
         self.should_expose = ''
         
     async def async_init(self):
-        self.skill_name = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_NAME] if CONF_SKILL_NAME in self.hass.data[DOMAIN][CONF_SKILL] else 'Home Assistant'   
+        self.skill_name = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_NAME] if CONF_SKILL_NAME in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_NAME] != '' else 'Home Assistant'   
         self.should_expose = self.hass.data[DOMAIN].get(CONF_FILTER)
         self.config = Config(
             settings=self.hass.data[DOMAIN].get(CONF_SETTINGS),
@@ -60,21 +60,31 @@ class YandexSkill():
             if self.oauth_token == '':
                 if not await self.get_oauth_token():
                     _LOGGER.error("Async Init Failed: No OAuth Token")
+                    self.hass.components.persistent_notification.async_create(
+                        "Ошибка при инициализации компонента - не удалось получить OAuth токен (уведомление навыка об изменении состояния устройств работать не будет).",
+                        title="Yandex Smart Home")
                     return False
             if self.skill_id == '':
                 if not await self.get_skill_id():
                     _LOGGER.error("Async Init Failed: No skill ID")
+                    self.hass.components.persistent_notification.async_create(
+                        "Ошибка при инициализации компонента - не удалось получить ID навыка (уведомление навыка об изменении состояния устройств работать не будет).",
+                        title="Yandex Smart Home")
                     return False
             await self.skill_linking()
-            if CONF_SKILL_USER in self.hass.data[DOMAIN][CONF_SKILL]:
-                self.user_id = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER]
+            # user_id
+            if CONF_SKILL_USER_ID in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER_ID] != '':
+                self.user_id = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER_ID]
             else:
                 if await self.device_list_update():
-                    if CONF_SKILL_USER in self.hass.data[DOMAIN][CONF_SKILL]:
-                        self.user_id = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER]
+                    if CONF_SKILL_USER_ID in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER_ID] != '':
+                        self.user_id = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER_ID]
                         if self.user_id == '':
-                            _LOGGER.error("Async Init Failed: No user ID")
-                            return False
+                                _LOGGER.error("Async Init Failed: No user ID")
+                                self.hass.components.persistent_notification.async_create(
+                                    "Ошибка при инициализации компонента - не удалось получить ID пользователя (уведомление навыка об изменении состояния устройств работать не будет).",
+                                    title="Yandex Smart Home")
+                                return False
             _LOGGER.info(f"User ID: {self.user_id}") # info
         except Exception:
             _LOGGER.exception("Async Init Failed")
@@ -96,8 +106,10 @@ class YandexSkill():
                         _LOGGER.info(f"Skill ID: {self.skill_id}")
                         return self.skill_id
             # create skill
-            coro = self.create_skill()
-            asyncio.create_task(coro)
+            # coro = self.create_skill()
+            # asyncio.create_task(coro)
+            self.skill_id = await self.create_skill()
+            return self.skill_id
         except Exception:
             _LOGGER.exception("Skill ID Failed")
         return False
