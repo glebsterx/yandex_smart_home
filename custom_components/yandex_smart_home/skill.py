@@ -55,6 +55,14 @@ class YandexSkill():
             should_expose=self.should_expose,
             entity_config=self.hass.data[DOMAIN].get(CONF_ENTITY_CONFIG)
         )
+        # light config
+        if CONF_SKILL_OAUTH_TOKEN in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_OAUTH_TOKEN] != '':
+            self.oauth_token = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_OAUTH_TOKEN]
+        if CONF_SKILL_ID in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_ID] != '':
+            self.skill_id = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_ID]
+        if CONF_SKILL_USER_ID in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER_ID] != '':
+            self.user_id = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER_ID]
+            
         try:        
             self.notification_session = async_create_clientsession(self.hass)
             if self.oauth_token == '':
@@ -95,9 +103,6 @@ class YandexSkill():
 
     async def get_skill_id(self):
         try:
-            if CONF_SKILL_ID in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_ID] != '':
-                self.skill_id = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_ID]
-                return self.skill_id
             if self.skill_id == '':
                 # check if skill exists
                 r = await self.session.get(f"{INDEX}/api/snapshot")
@@ -108,10 +113,10 @@ class YandexSkill():
                         self.skill_id = skill['id']
                         _LOGGER.info(f"Skill ID: {self.skill_id}")
                         return self.skill_id
-            # create skill
-            # coro = self.create_skill()
-            # asyncio.create_task(coro)
-            self.skill_id = await self.create_skill()
+                # create skill
+                # coro = self.create_skill()
+                # asyncio.create_task(coro)
+                await self.create_skill()
             return self.skill_id
         except Exception:
             _LOGGER.exception("Skill ID Failed")
@@ -119,9 +124,6 @@ class YandexSkill():
 
     async def get_oauth_token(self):
         try:
-            if CONF_SKILL_OAUTH_TOKEN in self.hass.data[DOMAIN][CONF_SKILL] and self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_OAUTH_TOKEN] != '':
-                self.oauth_token = self.hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_OAUTH_TOKEN]
-                return self.oauth_token
             if self.oauth_token == '':
                 r = await self.session.get(TOKEN_URL)
                 assert r.status == 200, await r.read()
