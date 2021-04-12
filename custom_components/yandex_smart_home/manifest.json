@@ -7,8 +7,6 @@
   "dependencies": [
     "http"
   ],
-  "codeowners": [
-    "@dmitry-k"
-  ],
-  "version": "0.0.1"
+  "codeowners": [],
+  "version": 0
 }
