@@ -71,13 +71,13 @@ class _Capability:
     type = ''
     instance = ''
     reportable = False
+    retrievable = True
 
     def __init__(self, hass, state, entity_config):
         """Initialize a trait for a state."""
         self.hass = hass
         self.state = state
         self.entity_config = entity_config
-        self.retrievable = True
         self.reportable = hass.data[DOMAIN][NOTIFIER_ENABLED]
 
     def description(self):
@@ -95,13 +95,14 @@ class _Capability:
 
     def get_state(self):
         """Return the state of this capability for this entity."""
+        value = self.get_value()
         return {
             'type': self.type,
             'state':  {
                 'instance': self.instance,
-                'value': self.get_value()
+                'value': value
             }
-        }
+        } if value else self.retrievable = False
 
     def parameters(self):
         """Return parameters for a devices request."""
