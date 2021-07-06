@@ -25,7 +25,10 @@ yandex_smart_home:
     token: !secret yandex_token
     proxy: https://myproxy.com
     skill_name: My Home Assistant
-    user_id: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  notifier:
+    oauth_token: AgAAAAAEEo2aYYR7m-CEyS7SEiUJjnKez3v3GZe
+    skill_id: d38d4c39-5846-ba53-67acc27e08bc
+    user_id: e8701ad48ba05a91604e480dd60899a3
   settings:
     pressure_unit: mmHg
   filter:
@@ -107,10 +110,15 @@ yandex_smart_home:
     proxy:
       (string) (Optional) Your proxy server, if you need it.
     skill_name:
-      (string) (Optional) Name of your dialog in Yandex.Dialogs (also might be set via GUI). Default "Home Assistant".
+      (string) (Optional) Name of your dialog in Yandex.Dialogs (also might be set via GUI). Default "Home Assistant". 
+  notifier:
+    (map) (Optional) Device status change notification settings.
+    oauth_token: 
+      (string) (Optional) Your Yandex Dialogs OAuth Token.
+    skill_id:
+      (string) (Optional) Your Skill ID. Get it at Yandex Dialogs.
     user_id:
-      (string) (Optional) User ID, under which you are logged in to Home Assistant, during the linking of accounts (also might be set via GUI). 
-
+      (string) (Optional) 32-digit User ID under which you autorized and linked your dialog with Home Assistant.
   settings:
     (map) (Optional) Various settings that affect this integration.
     pressure_unit:
@@ -160,7 +168,7 @@ yandex_smart_home:
           (float) (Optional) Range Precision (adjustment step)
       modes:
         (map) (Optional) Map of yandex mode functions (https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-docpage/)
-        fan_speed|cleanup_mode|program:
+        fan_speed|cleanup_mode|program|scene:
           (map) (Optional) Map of yandex modes (https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/mode-instance-modes-docpage/) to HA modes.
           yandex_mode1:
             - ha_mode1
@@ -241,3 +249,18 @@ yandex_smart_home:
 
 Credentials must be specified once, after which they will be imported into Config Entry and can be deleted, updated and edited there.
 When using 2FA, there may be problems with the login - in this case, it is recommended to use a token.
+
+### State changing notification
+
+If you want to notify Yandex Smart Home about a change in the state of your devices, you need to configure three parameters: [OAuth token](https://oauth.yandex.ru/authorize?response_type=token&client_id=c473ca268cd749d3a8371351a8f2bcbd), [skill ID](https://dialogs.yandex.ru/developer), and Home Assistant user ID (https://[YOUR HOME ASSISTANT URL:PORT]/config/users) to which the skill is linked.
+
+<img src="user_id.png" width="394">
+
+User ID is not the same as Home Assistant username. This is a 32-digit identifier that can be found by selecting the desired user in the settings.
+```
+yandex_smart_home:
+  notifier:
+    oauth_token: XXXXXXXXXXXXXXXXXXXXXXXXXXX
+    skill_id: xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxx
+    user_id: xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```

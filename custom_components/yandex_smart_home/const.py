@@ -1,5 +1,6 @@
 """Constants for Yandex Smart Home."""
 from homeassistant.components import (
+    air_quality,
     binary_sensor,
     camera,
     climate,
@@ -20,6 +21,7 @@ from homeassistant.components import (
 )
 DOMAIN = 'yandex_smart_home'
 
+CONFIG = 'yaml_config'
 DATA_CONFIG = 'config'
 
 CONF_SETTINGS = 'settings'
@@ -43,11 +45,13 @@ CONF_ENTITY_MODE_MAP = 'modes'
 #skill
 CONF_SKILL = 'skill'
 CONF_SKILL_NAME = 'skill_name'
-CONF_SKILL_USER_ID = 'user_id'
 CONF_PROXY = 'proxy'
-# light
+#notifier
+CONF_NOTIFIER = 'notifier'
 CONF_SKILL_OAUTH_TOKEN = 'oauth_token'
-CONF_SKILL_ID = 'skill_id'  
+CONF_SKILL_ID = 'skill_id'
+CONF_NOTIFIER_USER_ID = 'user_id'  
+NOTIFIER_ENABLED = 'notifier_enabled'
 
 # https://yandex.ru/dev/dialogs/alice/doc/smart-home/concepts/device-types.html/
 PREFIX_TYPES = 'devices.types.'
@@ -92,6 +96,8 @@ EVENT_DEVICES_RECEIVED = 'yandex_smart_home_devices'
 # Pressure units
 PRESSURE_UNIT_PASCAL = 'pa'
 PRESSURE_UNIT_HECTOPASCAL = 'hPa'
+PRESSURE_UNIT_KILOPASCAL = 'kPa'
+PRESSURE_UNIT_MEGAPASCAL = 'MPa'
 PRESSURE_UNIT_MMHG = 'mmHg'
 PRESSURE_UNIT_ATM = 'atm'
 PRESSURE_UNIT_BAR = 'bar'
@@ -106,7 +112,13 @@ PRESSURE_UNITS_TO_YANDEX_UNITS = {
 
 # Multiplier to convert from given pressure unit to pascal
 PRESSURE_TO_PASCAL = {
+    PRESSURE_UNIT_PASCAL: 1,
     PRESSURE_UNIT_HECTOPASCAL: 100,
+    PRESSURE_UNIT_KILOPASCAL: 1000,
+    PRESSURE_UNIT_MEGAPASCAL: 1000000,
+    PRESSURE_UNIT_MMHG: 133.322,
+    PRESSURE_UNIT_ATM: 101325,
+    PRESSURE_UNIT_BAR: 100000,
     PRESSURE_UNIT_MBAR: 0.01
 }
 
@@ -136,6 +148,7 @@ DOMAIN_TO_YANDEX_TYPES = {
     vacuum.DOMAIN: TYPE_VACUUM_CLEANER,
     water_heater.DOMAIN: TYPE_KETTLE,
     sensor.DOMAIN: TYPE_SENSOR,
+    air_quality.DOMAIN: TYPE_SENSOR,
 }
 
 DEVICE_CLASS_TO_YANDEX_TYPES = {

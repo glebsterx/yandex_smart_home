@@ -13,16 +13,22 @@ from homeassistant.helpers import entityfilter
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .const import (
-    CONF_SETTINGS, DOMAIN, CONF_PRESSURE_UNIT, CONF_ENTITY_CONFIG, CONF_FILTER, CONF_ROOM, CONF_TYPE,
+    DOMAIN, CONFIG, DATA_CONFIG, CONF_ENTITY_CONFIG, CONF_FILTER, CONF_ROOM, CONF_TYPE,
     CONF_ENTITY_PROPERTIES, CONF_ENTITY_PROPERTY_ENTITY, CONF_ENTITY_PROPERTY_ATTRIBUTE, CONF_ENTITY_PROPERTY_TYPE,
     CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID, CONF_RELATIVE_VOLUME_ONLY, CONF_ENTITY_RANGE, CONF_ENTITY_RANGE_MAX, 
-    CONF_ENTITY_RANGE_MIN, CONF_ENTITY_RANGE_PRECISION, CONF_ENTITY_MODE_MAP, PRESSURE_UNIT_MMHG, PRESSURE_UNITS_TO_YANDEX_UNITS,
-    CONF_SKILL, CONF_SKILL_NAME, CONF_SKILL_USER_ID, CONF_PROXY, CONF_SKILL_OAUTH_TOKEN, CONF_SKILL_ID)
+    # CONF_ENTITY_RANGE_MIN, CONF_ENTITY_RANGE_PRECISION, CONF_ENTITY_MODE_MAP, PRESSURE_UNIT_MMHG, PRESSURE_UNITS_TO_YANDEX_UNITS,
+    # CONF_SKILL, CONF_SKILL_NAME, CONF_SKILL_USER_ID, CONF_PROXY, CONF_SKILL_OAUTH_TOKEN, CONF_SKILL_ID)
 
+# from .http import async_register_http
+# from .core import utils
+# from .core.yandex_session import YandexSession
+# from .skill import YandexSkill
+    CONF_ENTITY_RANGE_MIN, CONF_ENTITY_RANGE_PRECISION, CONF_ENTITY_MODE_MAP,
+    CONF_SETTINGS, CONF_PRESSURE_UNIT, PRESSURE_UNIT_MMHG, PRESSURE_UNITS_TO_YANDEX_UNITS,
+    CONF_NOTIFIER, CONF_SKILL_OAUTH_TOKEN, CONF_SKILL_ID, CONF_NOTIFIER_USER_ID, NOTIFIER_ENABLED)
+from .helpers import Config
 from .http import async_register_http
-from .core import utils
-from .core.yandex_session import YandexSession
-from .skill import YandexSkill
+from .notifier import setup_notification
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +55,12 @@ ENTITY_SCHEMA = vol.Schema({
     vol.Optional(CONF_ENTITY_MODE_MAP, default={}): {cv.string: {cv.string: [cv.string]}},
 })
 
+NOTIFIER_SCHEMA = vol.Schema({
+    vol.Optional(CONF_SKILL_OAUTH_TOKEN): cv.string,
+    vol.Optional(CONF_SKILL_ID): cv.string,
+    vol.Optional(CONF_NOTIFIER_USER_ID): cv.string,
+}, extra=vol.PREVENT_EXTRA)
+
 def pressure_unit_validate(unit):
     if not unit in PRESSURE_UNITS_TO_YANDEX_UNITS:
         raise vol.Invalid(f'Pressure unit "{unit}" is not supported')
@@ -73,9 +85,16 @@ SETTINGS_SCHEMA = vol.Schema({
     ),
 })
 
+SETTINGS_SCHEMA = vol.Schema({
+    vol.Optional(CONF_PRESSURE_UNIT, default=PRESSURE_UNIT_MMHG): vol.Schema(
+        vol.All(str, pressure_unit_validate)
+    ),
+})
+
 YANDEX_SMART_HOME_SCHEMA = vol.All(
     vol.Schema({
         vol.Optional(CONF_SKILL, default={}): SKILL_SCHEMA,
+        vol.Optional(CONF_NOTIFIER, default={}): NOTIFIER_SCHEMA,
         vol.Optional(CONF_SETTINGS, default={}): SETTINGS_SCHEMA,
         vol.Optional(CONF_FILTER, default={}): entityfilter.FILTER_SCHEMA,
         vol.Optional(CONF_ENTITY_CONFIG, default={}): {cv.entity_id: ENTITY_SCHEMA},
@@ -88,44 +107,55 @@ CONFIG_SCHEMA = vol.Schema({
 
 async def async_setup(hass: HomeAssistant, yaml_config: Dict[str, Any]):
     """Activate Yandex Smart Home component."""
-    hass.data[DOMAIN] = yaml_config.get(DOMAIN, {})
-    async_register_http(hass, hass.data[DOMAIN])
+    # hass.data[DOMAIN] = yaml_config.get(DOMAIN, {})
+    # async_register_http(hass, hass.data[DOMAIN])
     
-    await _setup_entry_from_config(hass)
+    # await _setup_entry_from_config(hass)
     
-    return True
+    # return True
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    async def update_cookie_and_token(**kwargs):
-        kwargs[CONF_SKILL_NAME] = entry.data[CONF_SKILL_NAME]
-        kwargs[CONF_SKILL_USER_ID] = entry.data[CONF_SKILL_USER_ID]
-        hass.config_entries.async_update_entry(entry, data=kwargs)
+# async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
+    # async def update_cookie_and_token(**kwargs):
+        # kwargs[CONF_SKILL_NAME] = entry.data[CONF_SKILL_NAME]
+        # kwargs[CONF_SKILL_USER_ID] = entry.data[CONF_SKILL_USER_ID]
+        # hass.config_entries.async_update_entry(entry, data=kwargs)
     
-    session = async_create_clientsession(hass)
-    yandex = YandexSession(session, entry.data['x_token'], entry.data['music_token'], entry.data['cookie'])
-    if CONF_SKILL in hass.data[DOMAIN]:
-        config = hass.data[DOMAIN][CONF_SKILL]
-        yandex.proxy = config.get(CONF_PROXY)
-    yandex.add_update_listener(update_cookie_and_token)
+    # session = async_create_clientsession(hass)
+    # yandex = YandexSession(session, entry.data['x_token'], entry.data['music_token'], entry.data['cookie'])
+    # if CONF_SKILL in hass.data[DOMAIN]:
+        # config = hass.data[DOMAIN][CONF_SKILL]
+        # yandex.proxy = config.get(CONF_PROXY)
+    # yandex.add_update_listener(update_cookie_and_token)
 
-    if not await yandex.refresh_cookies():
-        hass.components.persistent_notification.async_create(
-            "Необходимо заново авторизоваться в Яндексе. Для этого [добавьте "
-            "новую интеграцию](/config/integrations) с тем же логином.",
-            title="Yandex Smart Home")
-        return False
+    # if not await yandex.refresh_cookies():
+        # hass.components.persistent_notification.async_create(
+            # "Необходимо заново авторизоваться в Яндексе. Для этого [добавьте "
+            # "новую интеграцию](/config/integrations) с тем же логином.",
+            # title="Yandex Smart Home")
+        # return False
     
-    if CONF_SKILL_NAME in entry.data and CONF_SKILL_NAME not in hass.data[DOMAIN][CONF_SKILL]:
-        hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_NAME] = entry.data[CONF_SKILL_NAME]
-    if CONF_SKILL_USER_ID in entry.data and CONF_SKILL_USER_ID not in hass.data[DOMAIN][CONF_SKILL]:
-        hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER_ID] = entry.data[CONF_SKILL_USER_ID]
-    # light
-    # if CONF_SKILL_OAUTH_TOKEN in entry.data and CONF_SKILL_OAUTH_TOKEN not in hass.data[DOMAIN][CONF_SKILL]:
-        # hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_OAUTH_TOKEN] = entry.data[CONF_SKILL_OAUTH_TOKEN]
-    # if CONF_SKILL_ID in entry.data and CONF_SKILL_ID not in hass.data[DOMAIN][CONF_SKILL]:
-        # hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_ID] = entry.data[CONF_SKILL_ID]
+    # if CONF_SKILL_NAME in entry.data and CONF_SKILL_NAME not in hass.data[DOMAIN][CONF_SKILL]:
+        # hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_NAME] = entry.data[CONF_SKILL_NAME]
+    # if CONF_SKILL_USER_ID in entry.data and CONF_SKILL_USER_ID not in hass.data[DOMAIN][CONF_SKILL]:
+        # hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_USER_ID] = entry.data[CONF_SKILL_USER_ID]
+    # # light
+    # # if CONF_SKILL_OAUTH_TOKEN in entry.data and CONF_SKILL_OAUTH_TOKEN not in hass.data[DOMAIN][CONF_SKILL]:
+        # # hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_OAUTH_TOKEN] = entry.data[CONF_SKILL_OAUTH_TOKEN]
+    # # if CONF_SKILL_ID in entry.data and CONF_SKILL_ID not in hass.data[DOMAIN][CONF_SKILL]:
+        # # hass.data[DOMAIN][CONF_SKILL][CONF_SKILL_ID] = entry.data[CONF_SKILL_ID]
     
-    await _setup_skill(hass, yandex)
+    # await _setup_skill(hass, yandex)
+    
+    hass.data[DOMAIN] = {}
+    hass.data[DOMAIN][CONFIG] = yaml_config.get(DOMAIN, {})
+    hass.data[DOMAIN][DATA_CONFIG] = Config(
+        settings=hass.data[DOMAIN][CONFIG].get(CONF_SETTINGS),
+        should_expose=hass.data[DOMAIN][CONFIG].get(CONF_FILTER),
+        entity_config=hass.data[DOMAIN][CONFIG].get(CONF_ENTITY_CONFIG)
+    )
+    hass.data[DOMAIN][NOTIFIER_ENABLED] = False
+    async_register_http(hass)
+    setup_notification(hass)
 
     return True
     

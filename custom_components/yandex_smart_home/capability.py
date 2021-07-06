@@ -38,12 +38,13 @@ from homeassistant.core import DOMAIN as HA_DOMAIN
 from homeassistant.util import color as color_util
 
 from .const import (
+    DOMAIN,
     ERR_INVALID_VALUE,
     ERR_NOT_SUPPORTED_IN_CURRENT_MODE,
     CONF_CHANNEL_SET_VIA_MEDIA_CONTENT_ID, CONF_RELATIVE_VOLUME_ONLY,
     CONF_ENTITY_RANGE_MAX, CONF_ENTITY_RANGE_MIN, 
     CONF_ENTITY_RANGE_PRECISION, CONF_ENTITY_RANGE,
-    CONF_ENTITY_MODE_MAP)
+    CONF_ENTITY_MODE_MAP, NOTIFIER_ENABLED)
 from .error import SmartHomeError
 
 _LOGGER = logging.getLogger(__name__)
@@ -69,14 +70,15 @@ class _Capability:
 
     type = ''
     instance = ''
-    retrievable = True
-    reportable = True
+    reportable = False
 
     def __init__(self, hass, state, entity_config):
         """Initialize a trait for a state."""
         self.hass = hass
         self.state = state
         self.entity_config = entity_config
+        self.retrievable = True
+        self.reportable = hass.data[DOMAIN][NOTIFIER_ENABLED]
 
     def description(self):
         """Return description for a devices request."""
@@ -93,13 +95,14 @@ class _Capability:
 
     def get_state(self):
         """Return the state of this capability for this entity."""
+        value = self.get_value()
         return {
             'type': self.type,
             'state':  {
                 'instance': self.instance,
-                'value': self.get_value()
+                'value': value
             }
-        }
+        } if value is not None else None
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -797,14 +800,14 @@ class CoverLevelCapability(_RangeCapability):
     def parameters(self):
         """Return parameters for a devices request."""
         return {
-				"instance": self.instance,
-				"range": {
-					"max": 100,
-					"min": 0,
-					"precision": 1
-				},
-				"unit": "unit.percent"
-			}
+                "instance": self.instance,
+                "range": {
+                    "max": 100,
+                    "min": 0,
+                    "precision": 1
+                },
+                "unit": "unit.percent"
+            }
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
@@ -825,11 +828,15 @@ class CoverLevelCapability(_RangeCapability):
         else:
              raise SmartHomeError(ERR_INVALID_VALUE, "Unsupported domain")
              
+        value = state['value']
+        if value < 0:
+            value = min(self.get_value() + value, 0)
+        
         await self.hass.services.async_call(
             self.state.domain,
             service, {
                 ATTR_ENTITY_ID: self.state.entity_id,
-                attr: state['value']
+                attr: value
             }, blocking=True, context=data.context)
 
 @register_capability
@@ -974,7 +981,9 @@ class BrightnessCapability(_RangeCapability):
     @staticmethod
     def supported(domain, features, entity_config, attributes):
         """Test if state is supported."""
-        return domain == light.DOMAIN and features & light.SUPPORT_BRIGHTNESS
+        return domain == light.DOMAIN and (
+            features & light.SUPPORT_BRIGHTNESS or light.brightness_supported(attributes.get(light.ATTR_SUPPORTED_COLOR_MODES))
+        )
 
     def parameters(self):
         """Return parameters for a devices request."""
@@ -1015,7 +1024,6 @@ class VolumeCapability(_RangeCapability):
     """Set volume functionality."""
 
     instance = 'volume'
-    retrievable = False
 
     def __init__(self, hass, state, config):
         super().__init__(hass, state, config)
@@ -1192,25 +1200,89 @@ class _ColorSettingCapability(_Capability):
     """
 
     type = CAPABILITIES_COLOR_SETTING
-
+    scenes_map = {
+        'alarm': ['Тревога','Alarm'],
+        'alice': ['Алиса','Alice'],
+        'candle': ['Свеча','Огонь','Candle','Fire'],
+        'dinner': ['Ужин','Dinner'],
+        'fantasy': ['Фантазия','Fantasy'],
+        'garland': ['Гирлянда','Garland'],
+        'jungle': ['Джунгли','Jungle'],
+        'movie': ['Кино','Movie'],
+        'neon': ['Неон','Neon'],
+        'night': ['Ночь','Night'],
+        'ocean': ['Океан','Ocean'],
+        'party': ['Вечеринка','Party'],
+        'reading': ['Чтение','Reading'],
+        'rest': ['Отдых','Rest'],
+        'romance': ['Романтика','Romance'],
+        'siren': ['Сирена','Siren'],
+        'sunrise': ['Рассвет','Sunrise'],
+        'sunset': ['Закат','Sunset']
+    }
+    
     def parameters(self):
         """Return parameters for a devices request."""
         result = {}
 
         features = self.state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
+        supported_color_modes = self.state.attributes.get(light.ATTR_SUPPORTED_COLOR_MODES, [])
 
-        if features & light.SUPPORT_COLOR:
+        if features & light.SUPPORT_COLOR or light.COLOR_MODE_RGB in supported_color_modes:
             result['color_model'] = 'rgb'
 
-        if features & light.SUPPORT_COLOR_TEMP:
+        if features & light.SUPPORT_COLOR_TEMP or light.color_temp_supported(supported_color_modes):
             max_temp = self.state.attributes[light.ATTR_MIN_MIREDS]
             min_temp = self.state.attributes[light.ATTR_MAX_MIREDS]
             result['temperature_k'] = {
                 'min': color_util.color_temperature_mired_to_kelvin(min_temp),
                 'max': color_util.color_temperature_mired_to_kelvin(max_temp)
             }
-
+            
+        if features & light.SUPPORT_EFFECT:
+            mapped_scenes = {
+                self.get_yandex_scene_by_ha_effect(e)
+                for e in self.state.attributes[light.ATTR_EFFECT_LIST]
+            }
+            supported_scenes = list(set(mapped_scenes) & set(self.scenes_map.keys()))
+            if supported_scenes:
+                result['color_scene'] = {
+                    'scenes': [
+                        {'id': s}
+                        for s in supported_scenes
+                    ]
+                }
         return result
+
+    def get_effect_map_from_config(self):
+        scenes = self.scenes_map
+        if CONF_ENTITY_MODE_MAP in self.entity_config:
+            modes = self.entity_config.get(CONF_ENTITY_MODE_MAP)
+            if self.instance in modes:
+                cfg_scenes = modes.get(self.instance)
+                for yandex_scene in scenes:
+                    if yandex_scene in cfg_scenes.keys():
+                        scenes[yandex_scene] = cfg_scenes[yandex_scene]
+                
+        return scenes
+
+    def get_yandex_scene_by_ha_effect(self, ha_effect):
+        scenes = self.get_effect_map_from_config()
+
+        for yandex_scene, names in scenes.items():
+            if str(ha_effect) in names:
+                return yandex_scene
+        return None
+
+    def get_ha_effect_by_yandex_scene(self, yandex_scene):
+        scenes = self.get_effect_map_from_config()
+
+        ha_effects = scenes[yandex_scene]
+        for ha_effect in ha_effects:
+            for am in self.state.attributes[light.ATTR_EFFECT_LIST]:
+                if str(am) == ha_effect:
+                    return ha_effect
+        return None
 
 
 @register_capability
@@ -1222,7 +1294,9 @@ class RgbCapability(_ColorSettingCapability):
     @staticmethod
     def supported(domain, features, entity_config, attributes):
         """Test if state is supported."""
-        return domain == light.DOMAIN and features & light.SUPPORT_COLOR
+        return domain == light.DOMAIN and (
+            features & light.SUPPORT_COLOR or light.COLOR_MODE_RGB in attributes.get(light.ATTR_SUPPORTED_COLOR_MODES, [])
+        )
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
@@ -1249,7 +1323,6 @@ class RgbCapability(_ColorSettingCapability):
                 light.ATTR_RGB_COLOR: (red, green, blue)
             }, blocking=True, context=data.context)
 
-
 @register_capability
 class TemperatureKCapability(_ColorSettingCapability):
     """Color temperature functionality."""
@@ -1259,7 +1332,9 @@ class TemperatureKCapability(_ColorSettingCapability):
     @staticmethod
     def supported(domain, features, entity_config, attributes):
         """Test if state is supported."""
-        return domain == light.DOMAIN and features & light.SUPPORT_COLOR_TEMP
+        return domain == light.DOMAIN and (
+            features & light.SUPPORT_COLOR or light.color_temp_supported(attributes.get(light.ATTR_SUPPORTED_COLOR_MODES))
+        )
 
     def get_value(self):
         """Return the state value of this capability for this entity."""
@@ -1276,6 +1351,30 @@ class TemperatureKCapability(_ColorSettingCapability):
             light.SERVICE_TURN_ON, {
                 ATTR_ENTITY_ID: self.state.entity_id,
                 light.ATTR_KELVIN: state['value']
+            }, blocking=True, context=data.context)
+
+@register_capability
+class ColorSceneCapability(_ColorSettingCapability):
+    """Color temperature functionality."""
+
+    instance = 'scene'
+
+    @staticmethod
+    def supported(domain, features, entity_config, attributes):
+        """Test if state is supported."""
+        return domain == light.DOMAIN and features & light.SUPPORT_EFFECT
+
+    def get_value(self):
+        """Return the state value of this capability for this entity."""
+        return self.get_yandex_scene_by_ha_effect(self.state.attributes.get(light.ATTR_EFFECT))
+
+    async def set_state(self, data, state):
+        """Set device state."""
+        await self.hass.services.async_call(
+            light.DOMAIN,
+            light.SERVICE_TURN_ON, {
+                ATTR_ENTITY_ID: self.state.entity_id,
+                light.ATTR_EFFECT: self.get_ha_effect_by_yandex_scene(state['value']),
             }, blocking=True, context=data.context)
 
 
